@@ -1,0 +1,131 @@
+from google.colab import files
+import pandas as pd
+
+# Upload CSV file
+uploaded = files.upload()
+
+# Automatically get the uploaded filename
+filename = list(uploaded.keys())[0]
+
+# Load CSV into a DataFrame
+df = pd.read_csv(filename)
+
+# Show first 5 rows to check
+df.head()
+
+import numpy as np
+
+# 1️⃣ Drop first row (metadata)
+df = df.drop(0).reset_index(drop=True)
+
+# 2️⃣ Clean column names
+df.columns = (
+    df.columns
+      .str.strip()
+      .str.replace(r"[#,+()]", "", regex=True)
+      .str.replace(" ", "_")
+)
+
+# 3️⃣ Convert year columns to numeric
+for col in ["YEAR_DISPLAY", "STARTYEAR", "ENDYEAR"]:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+
+# 4️⃣ Extract numeric part from 'Value' column
+def extract_numeric(value):
+    if isinstance(value, str):
+        first_part = value.split()[0]
+        try:
+            return float(first_part)
+        except:
+            return np.nan
+    return value
+
+if "Value" in df.columns:
+    df["Value_num"] = df["Value"].apply(extract_numeric)
+
+# 5️⃣ Convert numeric columns to floats
+for col in ["Numeric", "Low", "High", "Value_num"]:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+# 6️⃣ Drop fully empty columns
+df = df.dropna(axis=1, how="all")
+
+# 7️⃣ Replace blank strings with NaN
+df = df.replace("", np.nan)
+
+# 8️⃣ Keep only rows with actual Value_num
+df = df[df["Value_numimport pandas as pd
+import numpy as np
+
+# ===== Load raw data (relative path) =====
+df = pd.read_csv("../data/raw/ncd_raw.csv")
+
+# ===== 1. Drop first metadata row =====
+df = df.drop(0).reset_index(drop=True)
+
+# ===== 2. Clean column names =====
+df.columns = (
+    df.columns
+      .str.strip()
+      .str.replace(r"[#,+()]", "", regex=True)
+      .str.replace(" ", "_")
+)
+
+# ===== 3. Convert year columns =====
+for col in ["YEAR_DISPLAY", "STARTYEAR", "ENDYEAR"]:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+
+# ===== 4. Extract numeric from Value =====
+def extract_numeric(value):
+    if isinstance(value, str):
+        first_part = value.split()[0]
+        try:
+            return float(first_part)
+        except:
+            return np.nan
+    return value
+
+if "Value" in df.columns:
+    df["Value_num"] = df["Value"].apply(extract_numeric)
+
+# ===== 5. Convert numeric columns =====
+for col in ["Numeric", "Low", "High", "Value_num"]:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+# ===== 6. Drop fully empty columns =====
+df = df.dropna(axis=1, how="all")
+
+# ===== 7. Replace blank strings =====
+df = df.replace("", np.nan)
+
+# ===== 8. Keep only rows with valid numbers =====
+df = df[df["Value_num"].notna()].reset_index(drop=True)
+
+# ===== 9. Keep final required columns =====
+columns_to_keep = [
+    "COUNTRY_DISPLAY",
+    "YEAR_DISPLAY",
+    "STARTYEAR",
+    "ENDYEAR",
+    "GHO_DISPLAY",
+    "DIMENSION_NAME",
+    "Value_num"
+]
+
+df_cleaned = df[columns_to_keep].copy()
+
+# ===== 10. Save cleaned output =====
+df_cleaned.to_csv("../data/processed/cleaned_data.csv", index=False)
+print("✔ Saved cleaned_data.csv successfully!")
+"].notna()].reset_index(drop=True)
+
+# 9️⃣ Keep only important columns
+columns_to_keep = ["COUNTRY_DISPLAY", "YEAR_DISPLAY", "STARTYEAR", "ENDYEAR", "GHO_DISPLAY", "DIMENSION_NAME", "Value_num"]
+df_cleaned = df[columns_to_keep].copy()
+
+# 1️⃣0️⃣ Check cleaned data
+df_cleaned.head(), df_cleaned.info()

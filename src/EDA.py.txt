@@ -1,0 +1,165 @@
+# NCD Bhutan Analysis - Complete Colab Ready
+
+from google.colab import files
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import io
+import warnings
+import os
+warnings.filterwarnings('ignore')
+
+print("📁 UPLOADING YOUR DATA...")
+uploaded = files.upload()
+filename = list(uploaded.keys())[0]
+df = pd.read_csv(io.BytesIO(uploaded[filename]))
+
+print(f"✅ Data loaded: {filename}")
+print(f"📊 Shape: {df.shape}")
+print(f"📋 Columns: {list(df.columns)}")
+
+# 1. CLEAN COLUMN NAMES
+df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')\
+    .str.replace('(', '').str.replace(')', '').str.replace('#', '').str.replace('+', '_')
+
+# 2. IDENTIFY KEY COLUMNS
+year_col = next((c for c in df.columns if 'year' in c), None)
+value_col = next((c for c in df.columns if 'numeric' in c or 'value' in c), None)
+indicator_col = next((c for c in df.columns if 'gho' in c or 'indicator' in c), None)
+demo_col = next((c for c in df.columns if 'dimension' in c and 'name' in c), None)
+
+# 3. SELECT & RENAME
+selected_cols = [c for c in [year_col, value_col, indicator_col, demo_col] if c]
+df_clean = df[selected_cols].copy()
+
+rename_dict = {}
+if year_col: rename_dict[year_col] = 'year'
+if value_col: rename_dict[value_col] = 'value'
+if indicator_col: rename_dict[indicator_col] = 'indicator'
+if demo_col: rename_dict[demo_col] = 'demographic'
+df_clean = df_clean.rename(columns=rename_dict)
+
+# Convert types & drop NaN
+if 'year' in df_clean.columns: df_clean['year'] = pd.to_numeric(df_clean['year'], errors='coerce')
+if 'value' in df_clean.columns: df_clean['value'] = pd.to_numeric(df_clean['value'], errors='coerce')
+df_clean = df_clean.dropna()
+
+# 4. FILTER NCD INDICATORS
+if 'indicator' in df_clean.columns:
+    df_clean['indicator_lower'] = df_clean['indicator'].astype(str).str.lower()
+    ncd_keywords = [
+        'cholest', 'alcohol', 'blood', 'cardiovasc', 'heart',
+        'diabetes', 'hypertension', 'stroke', 'cancer',
+        'chronic', 'obesity', 'overweight', 'bmi',
+        'tobacco', 'smoking', 'asthma', 'copd',
+        'respiratory', 'mental', 'depression'
+    ]
+    ncd_mask = df_clean['indicator_lower'].str.contains('|'.join(ncd_keywords), na=False)
+    ncd_data = df_clean[ncd_mask].copy()
+    if ncd_data.empty: ncd_data = df_clean.copy()
+else:
+    ncd_data = df_clean.copy()
+
+# 5. VISUALIZATIONS
+plt.style.use('seaborn-v0_8-darkgrid')
+
+# Distribution
+if 'value' in ncd_data.columns:
+    plt.figure(figsize=(12,6))
+    plt.hist(ncd_data['value'], bins=30, edgecolor='black', alpha=0.7, color='steelblue')
+    plt.title('Distribution of NCD Values in Bhutan', fontweight='bold', fontsize=14)
+    plt.xlabel('Value')
+    plt.ylabel('Frequency')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+# Year trend
+if 'year' in ncd_data.columns:
+    yearly_avg = ncd_data.groupby('year')['value'].mean().reset_index()
+    plt.figure(figsize=(12,6))
+    plt.plot(yearly_avg['year'], yearly_avg['value'], 'o-', linewidth=2)
+    plt.fill_between(yearly_avg['year'], yearly_avg['value'], alpha=0.3)
+    plt.title('NCD Trends Over Time in Bhutan', fontweight='bold', fontsize=14)
+    plt.xlabel('Year')
+    plt.ylabel('Average Value')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+# Top indicators
+if 'indicator' in ncd_data.columns:
+    top_5 = ncd_data['indicator'].value_counts().head(5).index
+    plt.figure(figsize=(14,6))
+    for ind in top_5:
+        sub = ncd_data[ncd_data['indicator'] == ind]
+        if 'year' in sub.columns:
+            trend = sub.groupby('year')['value'].mean().reset_index()
+            plt.plot(trend['year'], trend['value'], marker='o', linewidth=2, label=ind[:30])
+    plt.title('Top NCD Indicators Over Time', fontweight='bold', fontsize=14)
+    plt.xlabel('Year')
+    plt.ylabel('Average Value')
+    plt.legend(bbox_to_anchor=(1.05,1), loc='upper left')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+# Demographic breakdown
+if 'demographic' in ncd_data.columns and ncd_data['demographic'].nunique()>1:
+    demo_avg = ncd_data.groupby('demographic')['value'].mean().sort_values(ascending=False)
+    plt.figure(figsize=(12,6))
+    bars = plt.bar(range(len(demo_avg)), demo_avg.values, color='lightcoral')
+    plt.xticks(range(len(demo_avg)), demo_avg.index, rotation=45, ha='right')
+    plt.title('NCD Values by Demographic Group', fontweight='bold', fontsize=14)
+    plt.xlabel('Demographic Group')
+    plt.ylabel('Average Value')
+    plt.grid(axis='y', alpha=0.3)
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height, f'{height:.2f}', ha='center', va='bottom', fontsize=9)
+    plt.tight_layout()
+    plt.show()
+
+# 6. SAVE RESULTS
+output_dir = '/content/bhutan_ncd_analysis'
+os.makedirs(output_dir, exist_ok=True)
+
+ncd_data.to_csv(f'{output_dir}/processed_ncd_data.csv', index=False)
+
+summary = f"""
+BHUTAN NCD ANALYSIS REPORT
+==========================
+Data Source: {filename}
+Analysis Date: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}
+Total records: {len(df):,}
+Clean records: {len(df_clean):,}
+NCD records: {len(ncd_data):,}
+"""
+
+with open(f'{output_dir}/summary_report.txt', 'w') as f:
+    f.write(summary)
+
+# Save main chart
+if 'value' in ncd_data.columns:
+    plt.figure(figsize=(10,6))
+    if 'year' in ncd_data.columns:
+        yearly_avg = ncd_data.groupby('year')['value'].mean().reset_index()
+        plt.plot(yearly_avg['year'], yearly_avg['value'], 'o-', linewidth=2)
+        plt.title('Bhutan NCD Trends Over Time', fontweight='bold')
+        plt.xlabel('Year')
+        plt.ylabel('Average Value')
+    else:
+        plt.hist(ncd_data['value'], bins=30, edgecolor='black', alpha=0.7)
+        plt.title('Distribution of NCD Values in Bhutan', fontweight='bold')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f'{output_dir}/main_chart.png', dpi=300, bbox_inches='tight')
+
+# Zip files
+!zip -r /content/bhutan_ncd_analysis.zip {output_dir}/*
+
+print("\n📦 Files ready for download:")
+files.download('/content/bhutan_ncd_analysis.zip')
